@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PGD - 64 Horas presenciais
 // @namespace    ddq.pgd.meta64
-// @version      1.1.2
+// @version      1.1.3
 // @description  Controle de horas PGD com objetivo mensal de 64h
 // @author       Danilo D. Quirino
 // @match        *://w3.secaf.sda.ibge.gov.br/*
@@ -75,15 +75,15 @@
 
     function getFeriados() {
         const feriados = [];
-        document.querySelectorAll('.holidays li')
+        document.querySelectorAll('.holidays .row')
             .forEach(li => {
-                const dia = Number(li.querySelector(
+                const dia = li.querySelector(
                         '.holidays__number')
-                    ?.textContent?.trim());
+                    ?.textContent?.trim();
                 const desc = li.querySelector(
                         '.holidays__text')
                     ?.textContent?.trim();
-                if (!Number.isNaN(dia) && desc) {
+                if (true) {
                     feriados.push({
                         dia,
                         descricao: desc,
@@ -96,9 +96,9 @@
                 const txt = row.textContent;
                 if (/feriado/i.test(txt) ||
                     /ponto facultativo/i.test(txt)) {
-                    const dia = Number(row.querySelector(
+                    const dia = row.querySelector(
                             'th h2')
-                        ?.textContent?.trim());
+                        ?.textContent?.trim();
                     if (dia && !feriados.some(f => f.dia ===
                             dia)) {
                         feriados.push({
