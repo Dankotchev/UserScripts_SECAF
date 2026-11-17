@@ -8,8 +8,8 @@
 // @match        *://intranet.ibge.gov.br/*
 // @run-at       document-idle
 // @noframes
-// @updateURL
-// @downloadURL
+// @updateURL    https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Saldo_Horas_PDI.user.js
+// @downloadURL  https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Saldo_Horas_PDI.user.js
 // ==/UserScript==
 
 (function () {
