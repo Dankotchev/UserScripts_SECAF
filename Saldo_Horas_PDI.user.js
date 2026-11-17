@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Saldo de Horas de Afastamento PDI
 // @namespace    ddq.pdi.saldo
-// @version      1.3.6
+// @version      1.3.7
 // @description  Calcula a quantidade de horas de afastamento utilizadas pelo código 09-027 e apresenta as horas restantes disponibilizadas.
 // @author       Danilo D Quirino
 // @match        *://w3.secaf.sda.ibge.gov.br/*
