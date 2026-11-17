@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         PGD - 64 Horas presenciais
 // @namespace    ddq.pgd.meta64
-// @version      1.1.1
+// @version      1.1.2
 // @description  Controle de horas PGD com objetivo mensal de 64h
 // @author       Danilo D. Quirino
 // @match        *://w3.secaf.sda.ibge.gov.br/*
 // @match        *://intranet.ibge.gov.br/*
 // @run-at       document-idle
 // @noframes
-// @updateURL
-// @downloadURL
+// @updateURL    https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Horas_PGD.user.js
+// @downloadURL  https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Horas_PGD.user.js
 // ==/UserScript==
 (function() {
     const isApuracao =
