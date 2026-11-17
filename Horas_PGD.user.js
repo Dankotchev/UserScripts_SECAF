@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PGD - 64 Horas presenciais
 // @namespace    ddq.pgd.meta64
-// @version      1.1.3
+// @version      1.2.0
 // @description  Controle de horas PGD com objetivo mensal de 64h
 // @author       Danilo D. Quirino
 // @match        *://w3.secaf.sda.ibge.gov.br/*
@@ -11,12 +11,12 @@
 // @updateURL    https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Horas_PGD.user.js
 // @downloadURL  https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Horas_PGD.user.js
 // ==/UserScript==
-(function() {
-    const isApuracao =
-    location.pathname.includes('/SDA-SECAF/ui/apuracao/') ||
-    location.href.includes('/SDA-SECAF/ui/apuracao/');
+(async function() {
+    const isApuracao = location.pathname.includes(
+            '/SDA-SECAF/ui/apuracao/') || location.href
+        .includes('/SDA-SECAF/ui/apuracao/');
     if (!isApuracao) return;
-
+    await aguardarFeriados();
     'use strict';
     const META_HORAS = 64;
     const META_MINUTOS = META_HORAS * 60;
@@ -26,6 +26,9 @@
     const CONFIG_PADRAO = {
         diasSemana: [2, 3] // terça e quarta
     };
+    const FERIADOS = getFeriados();
+    const DIAS_FERIADOS = new Set(FERIADOS.map(f => Number(f
+        .dia)));
     const pad = n => String(n)
         .padStart(2, '0');
     const fmtHM = minutos => {
@@ -35,16 +38,13 @@
         const m = minutos % 60;
         return `${sinal}${h}h${pad(m)}m`;
     };
-    const fmtHoras = minutos => (minutos / 60)
-        .toFixed(2)
-        .replace('.', ',');
 
     function getConfig() {
         try {
             return {
                 ...CONFIG_PADRAO,
-                ...JSON.parse(localStorage.getItem(STORAGE_KEY) ||
-                    '{}')
+                ...JSON.parse(localStorage.getItem(
+                    STORAGE_KEY) || '{}')
             };
         } catch {
             return CONFIG_PADRAO;
@@ -52,7 +52,8 @@
     }
 
     function setConfig(cfg) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(
+        cfg));
     }
 
     function getMonthInfo() {
@@ -91,6 +92,7 @@
                     });
                 }
             });
+        /*
         document.querySelectorAll('.apuracao-row')
             .forEach(row => {
                 const txt = row.textContent;
@@ -109,11 +111,16 @@
                     }
                 }
             });
-                return feriados.filter(f => {
-                    const { ano, mes } = getMonthInfo();
-                    const data = new Date(ano, mes, f.dia);
-                    const dow = data.getDay();
-                    return dow !== 0 && dow !== 6;})
+        */
+        return feriados.filter(f => {
+            const {
+                ano,
+                mes
+            } = getMonthInfo();
+            const data = new Date(ano, mes, f.dia);
+            const dow = data.getDay();
+            return dow !== 0 && dow !== 6;
+        })
     }
 
     function parseDia(row) {
@@ -128,18 +135,32 @@
 
     function parseCodigo(row) {
         const codigos = [...row.querySelectorAll(
-                '.movimentacao__evento-pilula span.px-2')].map(
-                x => x.textContent.trim())
+                '.movimentacao__evento-pilula span.px-2')]
+            .map(x => x.textContent.trim())
             .filter(Boolean);
         return codigos.join(', ');
+    }
+    async function aguardarFeriados(timeout = 10000) {
+        const inicio = Date.now();
+        while (Date.now() - inicio < timeout) {
+            const rows = document.querySelectorAll(
+                '.holidays .row');
+            if (rows.length > 0) {
+                return;
+            }
+            await new Promise(resolve => setTimeout(
+                resolve, 200));
+        }
+        console.warn(
+            'PGD: seção de feriados não encontrada.');
     }
 
     function parseHorasDia(row) {
         const spans = [...row.querySelectorAll(
             '.movimentacao__horario-tempo')].map(x => x
             .textContent.trim());
-        const hhmm = spans.findLast(s => /^\d{2}h\d{2}m$/i.test(
-            s));
+        const hhmm = spans.findLast(s => /^\d{2}h\d{2}m$/i
+            .test(s));
         if (!hhmm) return null;
         const m = hhmm.match(/(\d+)h(\d+)m/i);
         return Number(m[1]) * 60 + Number(m[2]);
@@ -150,7 +171,6 @@
             ano,
             mes
         } = getMonthInfo();
-        const feriados = getFeriados();
         const dias = [];
         document.querySelectorAll('tr.apuracao-row')
             .forEach(row => {
@@ -167,26 +187,26 @@
                     });
                 }
             });
-        for (const feriado of feriados) {
-            const existe = dias.some(x => x.dia === feriado.dia);
+        for (const feriado of FERIADOS) {
+            const existe = dias.some(x => x.dia === feriado
+                .dia);
             if (!existe) {
                 dias.push({
                     dia: feriado.dia,
                     data: `${pad(feriado.dia)}/${pad(mes + 1)}`,
                     minutos: 480,
-                    codigo: 'FERIADO/PONTO FACULTATIVO'
+                    codigo: feriado.descricao
                 });
             }
         }
         dias.sort((a, b) => a.dia - b.dia);
-        const totalMinutos = dias.reduce((s, d) => s + d.minutos,
-            0);
+        const totalMinutos = dias.reduce((s, d) => s + d
+            .minutos, 0);
         return {
             ano,
             mes,
             dias,
-            totalMinutos,
-            feriados
+            totalMinutos
         };
     }
 
@@ -194,15 +214,13 @@
         const hoje = new Date();
         const ultimoDia = new Date(ano, mes + 1, 0)
             .getDate();
-        const feriadoDias = new Set(getFeriados()
-            .map(f => f.dia));
         let total = 0;
         for (let dia = hoje.getDate() + 1; dia <=
             ultimoDia; dia++) {
             const d = new Date(ano, mes, dia);
             const dow = d.getDay();
             if (dow === 0 || dow === 6) continue;
-            if (feriadoDias.has(dia)) continue;
+            if (DIAS_FERIADOS.has(dia)) continue;
             total++;
         }
         return total;
@@ -214,8 +232,6 @@
         }
         const config = getConfig();
         const diasPermitidos = new Set(config.diasSemana);
-        const feriados = new Set(getFeriados()
-            .map(f => f.dia));
         let acumulado = totalMinutos;
         const hoje = new Date();
         const ultimoDia = new Date(ano, mes + 1, 0)
@@ -224,7 +240,7 @@
             ultimoDia; dia++) {
             const data = new Date(ano, mes, dia);
             const dow = data.getDay();
-            if (feriados.has(dia)) {
+            if (DIAS_FERIADOS.has(dia)) {
                 acumulado += 480;
             } else if (diasPermitidos.has(dow)) {
                 acumulado += 480;
@@ -275,16 +291,15 @@
 
     function abrirPanel() {
         const dados = coletarDados();
-        const horasFaltantes = Math.max(0, META_MINUTOS - dados
-            .totalMinutos);
+        const horasFaltantes = Math.max(0, META_MINUTOS -
+            dados.totalMinutos);
         const progresso = Math.min(100,
             (dados.totalMinutos / META_MINUTOS) * 100);
-        const diasRest = diasUteisRestantes(dados.ano, dados.mes);
-        const mediaNecessaria = diasRest > 0 ? horasFaltantes /
-            diasRest : 0;
+        const diasRest = diasUteisRestantes(dados.ano, dados
+            .mes);
         const dias8h = Math.ceil(horasFaltantes / 480);
-        const projecao = proximoDiaMeta(dados.totalMinutos, dados
-            .ano, dados.mes);
+        const projecao = proximoDiaMeta(dados.totalMinutos,
+            dados.ano, dados.mes);
         const host = document.createElement('div');
         host.id = HOST_ID;
         Object.assign(host.style, {
@@ -446,10 +461,6 @@ th {
         <div class="v">${projecao}</div>
       </div>
       <div class="card">
-        <div class="t">Média necessária por dia útil</div>
-        <div class="v"> ${fmtHM(Math.round(mediaNecessaria))} </div>
-      </div>
-      <div class="card">
         <div class="t">Dias úteis restantes</div>
         <div class="v">${diasRest} dias</div>
       </div>
@@ -490,10 +501,12 @@ th {
                     const dia = Number(btn.dataset
                         .dia);
                     const config = getConfig();
-                    let dias = [...config.diasSemana];
+                    let dias = [...config
+                        .diasSemana
+                    ];
                     if (dias.includes(dia)) {
-                        dias = dias.filter(x => x !==
-                            dia);
+                        dias = dias.filter(x =>
+                            x !== dia);
                     } else {
                         dias.push(dia);
                     }
@@ -504,7 +517,7 @@ th {
                     setConfig({
                         ...config,
                         diasSemana: dias
-                        .sort()
+                            .sort()
                     });
                     btn.classList.toggle('ativo');
                     closePanel();
