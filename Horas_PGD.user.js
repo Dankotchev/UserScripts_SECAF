@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PGD - 64 Horas presenciais
 // @namespace    ddq.pgd.meta64
-// @version      1.2.1
+// @version      1.2.2
 // @description  Controle de horas PGD com objetivo mensal de 64h
 // @author       Danilo D. Quirino
 // @match        *://w3.secaf.sda.ibge.gov.br/*
@@ -16,14 +16,9 @@
     if (!isApuracao) return;
     await aguardarFeriados();
     'use strict';
-    const META_HORAS = 64;
-    const META_MINUTOS = META_HORAS * 60;
     const HOST_ID = 'ddq-pgd-host';
     const BTN_ID = 'ddq-pgd-launcher';
     const STORAGE_KEY = 'ddq-pgd-config';
-    const CONFIG_PADRAO = {
-        diasSemana: [2, 3] // terça e quarta
-    };
     const {
         ANO,
         MES
@@ -40,6 +35,11 @@
         return `${sinal}${h}h${pad(m)}m`;
     };
     const CODIGOS_ZERO_HORAS = ["0270", "0221"];
+    const CONFIG_PADRAO = {
+        diasSemana: [2, 3], // terça e quarta
+        metaHoras: 64
+    };
+    const META_MINUTOS = getMetaMinutos();
     // Configurações do usuário
     function getConfig() {
         try {
@@ -54,6 +54,11 @@
 
     function setConfig(cfg) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    }
+
+    function getMetaMinutos() {
+        return getConfig()
+            .metaHoras * 60;
     }
     ////
     function getMesApuracao() {
@@ -169,7 +174,10 @@
                     dia: feriado.dia,
                     data: `${pad(feriado.dia)}/${pad(MES + 1)}`,
                     minutos: 480,
-                    codigo: feriado.descricao
+                    codigos: [{
+                        codigo: '',
+                        descricao: feriado.descricao
+                    }]
                 });
             }
         }
@@ -320,6 +328,30 @@
         // Fechar painel
         shadow.querySelector('.close')
             .addEventListener('click', closePanel);
+        shadow.querySelector('#editar-meta')
+            .addEventListener('click', () => {
+                const config = getConfig();
+                const valor = prompt('Informe a carga horária mensal desejada:', config.metaHoras);
+                if (valor === null) {
+                    return;
+                }
+                const horas = Number(valor);
+                if (!Number.isInteger(horas) || horas < 1 || horas > 200) {
+                    alert('Informe uma quantidade válida de horas entre 1 e 200.');
+                    return;
+                }
+                const confirmar = confirm(`Deseja alterar a meta mensal para ${horas} horas?\n\n` +
+                    'Utilize esta opção apenas se sua carga horária mensal for diferente da padrão de 64 horas.\n' +
+                    'Feriados e pontos facultativos já são considerados automaticamente.');
+                if (!confirmar) {
+                    return;
+                }
+                setConfig({
+                    ...config,
+                    metaHoras: horas
+                });
+                location.reload();
+            });
         // Drag and drop
         const drag = shadow.getElementById('drag');
         let movendo = false;
@@ -369,7 +401,9 @@
         init();
     }
 
-    function render_css({progresso}) {
+    function render_css({
+        progresso
+    }) {
         return `
 * {
   box-sizing: border-box;
@@ -392,6 +426,29 @@
   justify-content: space-between;
   align-items: center;
 }
+.header-title{
+    display:flex;
+    align-items:center;
+    gap:16px;
+}
+.edit-meta{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-left:6px;
+    border:none;
+    background:transparent;
+    color:#9fb1c2;
+    cursor:pointer;
+    padding:4px;
+    border-radius:4px;
+    transition:.2s;
+}
+.edit-meta:hover{
+    color:#4fa3ff;
+    background:rgba(79,163,255,.1);
+}
+
 .close {
   cursor: pointer;
   font-size: 20px;
@@ -501,7 +558,22 @@ th {
         return `
 <div class="panel">
   <div class="header" id="drag">
-    <div>PGD - 64 Horas presenciais</div>
+    <div class="header-title">
+    <span>
+        PGD - ${getConfig().metaHoras} Horas presenciais
+    </span>
+
+    <button
+        id="editar-meta"
+        class="edit-meta"
+        title="Altere o valor da carga horária apenas se sua carga diferente da 64 horas. Feriados e pontos facultativos já são calculados."
+    >
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="currentColor"
+            d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.04a1.003 1.003 0 0 0 0-1.42L18.21 3.29a1.003 1.003 0 0 0-1.42 0L14.71 5.37l3.75 3.75 2.25-1.91z"/>
+    </svg>
+    </button>
+</div>
     <div class="close">✕</div>
   </div>
   <div class="content">
