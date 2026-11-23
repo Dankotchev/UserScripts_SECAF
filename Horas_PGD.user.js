@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PGD - 64 Horas presenciais
 // @namespace    ddq.pgd.meta64
-// @version      1.2.0
+// @version      1.2.1
 // @description  Controle de horas PGD com objetivo mensal de 64h
 // @author       Danilo D. Quirino
 // @match        *://w3.secaf.sda.ibge.gov.br/*
@@ -12,9 +12,7 @@
 // @downloadURL  https://github.com/Dankotchev/UserScripts_SECAF/raw/refs/heads/main/Horas_PGD.user.js
 // ==/UserScript==
 (async function() {
-    const isApuracao = location.pathname.includes(
-            '/SDA-SECAF/ui/apuracao/') || location.href
-        .includes('/SDA-SECAF/ui/apuracao/');
+    const isApuracao = location.pathname.includes('/SDA-SECAF/ui/apuracao/') || location.href.includes('/SDA-SECAF/ui/apuracao/');
     if (!isApuracao) return;
     await aguardarFeriados();
     'use strict';
@@ -26,9 +24,12 @@
     const CONFIG_PADRAO = {
         diasSemana: [2, 3] // terça e quarta
     };
+    const {
+        ANO,
+        MES
+    } = getMesApuracao();
     const FERIADOS = getFeriados();
-    const DIAS_FERIADOS = new Set(FERIADOS.map(f => Number(f
-        .dia)));
+    const DIAS_FERIADOS = new Set(FERIADOS.map(f => Number(f.dia)));
     const pad = n => String(n)
         .padStart(2, '0');
     const fmtHM = minutos => {
@@ -38,13 +39,13 @@
         const m = minutos % 60;
         return `${sinal}${h}h${pad(m)}m`;
     };
-
+    const CODIGOS_ZERO_HORAS = ["0270", "0221"];
+    // Configurações do usuário
     function getConfig() {
         try {
             return {
                 ...CONFIG_PADRAO,
-                ...JSON.parse(localStorage.getItem(
-                    STORAGE_KEY) || '{}')
+                ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
             };
         } catch {
             return CONFIG_PADRAO;
@@ -52,25 +53,32 @@
     }
 
     function setConfig(cfg) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(
-        cfg));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
     }
-
-    function getMonthInfo() {
-        const hoje = new Date();
-        let ano = hoje.getFullYear();
-        let mes = hoje.getMonth();
-        const href = document.querySelector(
-                '.month-select a[href*="/ui/apuracao/"]')
-            ?.href;
-        const match = href?.match(/\/(\d{6})/);
-        if (match) {
-            ano = Number(match[1].substring(0, 4));
-            mes = Number(match[1].substring(4, 6)) - 1;
-        }
+    ////
+    function getMesApuracao() {
+        const select = document.querySelector('select.month-select__text[name="mes"]');
+        const texto = select?.selectedOptions?.[0]?.textContent?.trim();
+        if (!texto) return;
+        const [nomeMes, anoStr] = texto.split(/\s+/);
+        const meses = {
+            janeiro: 0,
+            fevereiro: 1,
+            março: 2,
+            marco: 2,
+            abril: 3,
+            maio: 4,
+            junho: 5,
+            julho: 6,
+            agosto: 7,
+            setembro: 8,
+            outubro: 9,
+            novembro: 10,
+            dezembro: 11
+        };
         return {
-            ano,
-            mes
+            ANO: Number(anoStr),
+            MES: meses[nomeMes.toLowerCase()]
         };
     }
 
@@ -78,11 +86,9 @@
         const feriados = [];
         document.querySelectorAll('.holidays .row')
             .forEach(li => {
-                const dia = li.querySelector(
-                        '.holidays__number')
+                const dia = li.querySelector('.holidays__number')
                     ?.textContent?.trim();
-                const desc = li.querySelector(
-                        '.holidays__text')
+                const desc = li.querySelector('.holidays__text')
                     ?.textContent?.trim();
                 if (true) {
                     feriados.push({
@@ -92,35 +98,21 @@
                     });
                 }
             });
-        /*
-        document.querySelectorAll('.apuracao-row')
-            .forEach(row => {
-                const txt = row.textContent;
-                if (/feriado/i.test(txt) ||
-                    /ponto facultativo/i.test(txt)) {
-                    const dia = row.querySelector(
-                            'th h2')
-                        ?.textContent?.trim();
-                    if (dia && !feriados.some(f => f.dia ===
-                            dia)) {
-                        feriados.push({
-                            dia,
-                            descricao: txt.trim(),
-                            minutos: 480
-                        });
-                    }
-                }
-            });
-        */
         return feriados.filter(f => {
-            const {
-                ano,
-                mes
-            } = getMonthInfo();
-            const data = new Date(ano, mes, f.dia);
+            const data = new Date(ANO, MES, f.dia);
             const dow = data.getDay();
             return dow !== 0 && dow !== 6;
         })
+    }
+
+    function parseCodigo(row) {
+        return [...row.querySelectorAll('.movimentacao__evento-pilula')].map(pilula => ({
+                codigo: pilula.querySelector('.px-2')
+                    ?.textContent.trim() ?? '',
+                descricao: pilula.querySelector('.pr-2')
+                    ?.textContent.trim() ?? ''
+            }))
+            .filter(x => x.codigo);
     }
 
     function parseDia(row) {
@@ -133,91 +125,69 @@
         };
     }
 
-    function parseCodigo(row) {
-        const codigos = [...row.querySelectorAll(
-                '.movimentacao__evento-pilula span.px-2')]
-            .map(x => x.textContent.trim())
-            .filter(Boolean);
-        return codigos.join(', ');
-    }
-    async function aguardarFeriados(timeout = 10000) {
-        const inicio = Date.now();
-        while (Date.now() - inicio < timeout) {
-            const rows = document.querySelectorAll(
-                '.holidays .row');
-            if (rows.length > 0) {
-                return;
-            }
-            await new Promise(resolve => setTimeout(
-                resolve, 200));
-        }
-        console.warn(
-            'PGD: seção de feriados não encontrada.');
-    }
-
     function parseHorasDia(row) {
-        const spans = [...row.querySelectorAll(
-            '.movimentacao__horario-tempo')].map(x => x
-            .textContent.trim());
-        const hhmm = spans.findLast(s => /^\d{2}h\d{2}m$/i
-            .test(s));
+        const spans = [...row.querySelectorAll('.movimentacao__horario-tempo')].map(x => x.textContent.trim());
+        const hhmm = spans.findLast(s => /^\d{2}h\d{2}m$/i.test(s));
         if (!hhmm) return null;
         const m = hhmm.match(/(\d+)h(\d+)m/i);
         return Number(m[1]) * 60 + Number(m[2]);
     }
 
     function coletarDados() {
-        const {
-            ano,
-            mes
-        } = getMonthInfo();
         const dias = [];
         document.querySelectorAll('tr.apuracao-row')
             .forEach(row => {
                 const diaInfo = parseDia(row);
                 if (!diaInfo) return;
                 const horas = parseHorasDia(row);
-                const codigo = parseCodigo(row);
+                const codigos = parseCodigo(row);
                 if (horas !== null) {
                     dias.push({
                         dia: diaInfo.dia,
-                        data: `${pad(diaInfo.dia)}/${pad(mes + 1)}`,
+                        data: `${pad(diaInfo.dia)}/${pad(MES + 1)}`,
                         minutos: horas,
-                        codigo
+                        codigos
                     });
+                }
+                if (horas <= 0 && codigos.some(c => CODIGOS_ZERO_HORAS.includes(c.codigo))) {
+                    const data = new Date(ANO, MES, diaInfo.dia);
+                    const weekDay = data.getDay();
+                    if (weekDay > 0 && weekDay < 6) {
+                        dias.push({
+                            dia: diaInfo.dia,
+                            data: `${pad(diaInfo.dia)}/${pad(MES + 1)}`,
+                            minutos: 480,
+                            codigos
+                        });
+                    }
                 }
             });
         for (const feriado of FERIADOS) {
-            const existe = dias.some(x => x.dia === feriado
-                .dia);
+            const existe = dias.some(x => x.dia === feriado.dia);
             if (!existe) {
                 dias.push({
                     dia: feriado.dia,
-                    data: `${pad(feriado.dia)}/${pad(mes + 1)}`,
+                    data: `${pad(feriado.dia)}/${pad(MES + 1)}`,
                     minutos: 480,
                     codigo: feriado.descricao
                 });
             }
         }
         dias.sort((a, b) => a.dia - b.dia);
-        const totalMinutos = dias.reduce((s, d) => s + d
-            .minutos, 0);
+        const totalMinutos = dias.reduce((s, d) => s + d.minutos, 0);
         return {
-            ano,
-            mes,
             dias,
             totalMinutos
         };
     }
 
-    function diasUteisRestantes(ano, mes) {
+    function diasUteisRestantes() {
         const hoje = new Date();
-        const ultimoDia = new Date(ano, mes + 1, 0)
+        const ultimoDia = new Date(ANO, MES + 1, 0)
             .getDate();
         let total = 0;
-        for (let dia = hoje.getDate() + 1; dia <=
-            ultimoDia; dia++) {
-            const d = new Date(ano, mes, dia);
+        for (let dia = hoje.getDate() + 1; dia <= ultimoDia; dia++) {
+            const d = new Date(ANO, MES, dia);
             const dow = d.getDay();
             if (dow === 0 || dow === 6) continue;
             if (DIAS_FERIADOS.has(dia)) continue;
@@ -226,7 +196,7 @@
         return total;
     }
 
-    function proximoDiaMeta(totalMinutos, ano, mes) {
+    function proximoDiaMeta(totalMinutos) {
         if (totalMinutos >= META_MINUTOS) {
             return 'Meta já cumprida';
         }
@@ -234,11 +204,10 @@
         const diasPermitidos = new Set(config.diasSemana);
         let acumulado = totalMinutos;
         const hoje = new Date();
-        const ultimoDia = new Date(ano, mes + 1, 0)
+        const ultimoDia = new Date(ANO, MES + 1, 0)
             .getDate();
-        for (let dia = hoje.getDate() + 1; dia <=
-            ultimoDia; dia++) {
-            const data = new Date(ano, mes, dia);
+        for (let dia = hoje.getDate() + 1; dia <= ultimoDia; dia++) {
+            const data = new Date(ANO, MES, dia);
             const dow = data.getDay();
             if (DIAS_FERIADOS.has(dia)) {
                 acumulado += 480;
@@ -246,10 +215,21 @@
                 acumulado += 480;
             }
             if (acumulado >= META_MINUTOS) {
-                return `${pad(dia)}/${pad(mes + 1)}/${ano}`;
+                return `${pad(dia)}/${pad(MES + 1)}`;
             }
         }
         return 'Não atinge neste mês';
+    }
+    async function aguardarFeriados(timeout = 2000) {
+        const inicio = Date.now();
+        while (Date.now() - inicio < timeout) {
+            const rows = document.querySelectorAll('.holidays .row');
+            if (rows.length > 0) {
+                return;
+            }
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        console.warn('PGD: seção de feriados não encontrada.');
     }
 
     function ensureButton() {
@@ -291,15 +271,12 @@
 
     function abrirPanel() {
         const dados = coletarDados();
-        const horasFaltantes = Math.max(0, META_MINUTOS -
-            dados.totalMinutos);
+        const horasFaltantes = Math.max(0, META_MINUTOS - dados.totalMinutos);
         const progresso = Math.min(100,
             (dados.totalMinutos / META_MINUTOS) * 100);
-        const diasRest = diasUteisRestantes(dados.ano, dados
-            .mes);
+        const diasRest = diasUteisRestantes();
         const dias8h = Math.ceil(horasFaltantes / 480);
-        const projecao = proximoDiaMeta(dados.totalMinutos,
-            dados.ano, dados.mes);
+        const projecao = proximoDiaMeta(dados.totalMinutos);
         const host = document.createElement('div');
         host.id = HOST_ID;
         Object.assign(host.style, {
@@ -313,8 +290,87 @@
         const shadow = host.attachShadow({
             mode: 'open'
         });
-        shadow.innerHTML = `
-<style>
+        shadow.innerHTML = `<style>${render_css({progresso})}</style>
+        ${renderPanelHtml({dados, progresso, horasFaltantes, dias8h, projecao, diasRest})}`
+        document.body.appendChild(host);
+        shadow.querySelectorAll('.dia-btn')
+            .forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const dia = Number(btn.dataset.dia);
+                    const config = getConfig();
+                    let dias = [...config.diasSemana];
+                    if (dias.includes(dia)) {
+                        dias = dias.filter(x => x !== dia);
+                    } else {
+                        dias.push(dia);
+                    }
+                    // impede ficar sem nenhum dia
+                    if (!dias.length) {
+                        dias = [dia];
+                    }
+                    setConfig({
+                        ...config,
+                        diasSemana: dias.sort()
+                    });
+                    btn.classList.toggle('ativo');
+                    closePanel();
+                    abrirPanel();
+                });
+            });
+        // Fechar painel
+        shadow.querySelector('.close')
+            .addEventListener('click', closePanel);
+        // Drag and drop
+        const drag = shadow.getElementById('drag');
+        let movendo = false;
+        let startX = 0;
+        let startY = 0;
+        let offsetX = 0;
+        let offsetY = 0;
+        drag.addEventListener('mousedown', e => {
+            movendo = true;
+            const rect = host.getBoundingClientRect();
+            offsetX = rect.left;
+            offsetY = rect.top;
+            startX = e.clientX;
+            startY = e.clientY;
+            host.style.left = `${offsetX}px`;
+            host.style.top = `${offsetY}px`;
+            host.style.right = 'auto';
+            host.style.bottom = 'auto';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', e => {
+            if (!movendo) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            host.style.left = `${offsetX + dx}px`;
+            host.style.top = `${offsetY + dy}px`;
+        });
+        document.addEventListener('mouseup', () => {
+            movendo = false;
+        });
+    }
+
+    function init() {
+        ensureButton();
+    }
+    // Recria botão caso a SPA recarregue conteúdo
+    const observer = new MutationObserver(() => {
+        ensureButton();
+    });
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    function render_css({progresso}) {
+        return `
 * {
   box-sizing: border-box;
   font-family: Segoe UI, Arial;
@@ -431,8 +487,18 @@ th {
   border-color: #2563eb;
   box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
 }
-</style>
+        `
+    }
 
+    function renderPanelHtml({
+        dados,
+        progresso,
+        horasFaltantes,
+        dias8h,
+        projecao,
+        diasRest
+    }) {
+        return `
 <div class="panel">
   <div class="header" id="drag">
     <div>PGD - 64 Horas presenciais</div>
@@ -479,100 +545,18 @@ th {
           <tr>
             <th>Data</th>
             <th>Horas</th>
-            <th>Código</th>
+            <th>Código - Afastamentos</th>
           </tr>
         </thead>
-        <tbody> ${dados.dias
-            .filter(d => d.minutos > 0)
-            .map(d => ` <tr>
+        <tbody> ${dados.dias .filter(d => d.minutos > 0) .map(d => ` <tr>
             <td>${d.data}</td>
             <td>${fmtHM(d.minutos)}</td>
-            <td>${d.codigo || '-'}</td>
+            <td>${d.codigos?.length ? d.codigos.map(c => `${c.codigo} - ${c.descricao}`).join(' <br>') : ''} </td>
           </tr> `).join('')} </tbody>
       </table>
     </div>
   </div>
 </div>
-`
-        document.body.appendChild(host);
-        shadow.querySelectorAll('.dia-btn')
-            .forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const dia = Number(btn.dataset
-                        .dia);
-                    const config = getConfig();
-                    let dias = [...config
-                        .diasSemana
-                    ];
-                    if (dias.includes(dia)) {
-                        dias = dias.filter(x =>
-                            x !== dia);
-                    } else {
-                        dias.push(dia);
-                    }
-                    // impede ficar sem nenhum dia
-                    if (!dias.length) {
-                        dias = [dia];
-                    }
-                    setConfig({
-                        ...config,
-                        diasSemana: dias
-                            .sort()
-                    });
-                    btn.classList.toggle('ativo');
-                    closePanel();
-                    abrirPanel();
-                });
-            });
-        // Fechar painel
-        shadow.querySelector('.close')
-            .addEventListener('click', closePanel);
-        // Drag and drop
-        const drag = shadow.getElementById('drag');
-        let movendo = false;
-        let startX = 0;
-        let startY = 0;
-        let offsetX = 0;
-        let offsetY = 0;
-        drag.addEventListener('mousedown', e => {
-            movendo = true;
-            const rect = host.getBoundingClientRect();
-            offsetX = rect.left;
-            offsetY = rect.top;
-            startX = e.clientX;
-            startY = e.clientY;
-            host.style.left = `${offsetX}px`;
-            host.style.top = `${offsetY}px`;
-            host.style.right = 'auto';
-            host.style.bottom = 'auto';
-            e.preventDefault();
-        });
-        document.addEventListener('mousemove', e => {
-            if (!movendo) return;
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            host.style.left = `${offsetX + dx}px`;
-            host.style.top = `${offsetY + dy}px`;
-        });
-        document.addEventListener('mouseup', () => {
-            movendo = false;
-        });
-    }
-
-    function init() {
-        ensureButton();
-    }
-    // Recria botão caso a SPA recarregue conteúdo
-    const observer = new MutationObserver(() => {
-        ensureButton();
-    });
-    observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-    });
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+`;
     }
 })();
